@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Teaching Details</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        background: #f5f7fb;
+        color: #1f2937;
+      }
+      .container {
+        max-width: 1000px;
+        margin: 40px auto;
+        padding: 24px;
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+      }
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+      }
+      button {
+        background: #2563eb;
+        color: white;
+        border: none;
+        padding: 10px 16px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 14px;
+      }
+      button:hover { background: #1d4ed8; }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th, td {
+        padding: 12px;
+        border-bottom: 1px solid #e5e7eb;
+        text-align: left;
+      }
+      th { background: #f8fafc; }
+      .form-card {
+        margin-top: 20px;
+        padding: 16px;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        display: none;
+      }
+      .form-card input, .form-card select {
+        width: 100%;
+        margin-bottom: 10px;
+        padding: 10px;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+      }
+      .actions { display: flex; gap: 10px; }
+      .message { margin-top: 12px; font-weight: bold; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h2>College Course Teaching Details</h2>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <span id="userLabel" style="font-weight:bold;"></span>
+          <button id="addBtn">＋ Add Record</button>
+        </div>
+      </div>
+
+      <div id="message" class="message"></div>
+
+      <div id="formCard" class="form-card">
+        <h3>Add New Record</h3>
+        <select id="collegeSelect">
+          <option value="">Select College</option>
+        </select>
+        <input id="programId" placeholder="Program Id" />
+        <input id="semester" placeholder="Semester" />
+        <input id="upcCode" placeholder="UPC Code" />
+        <input id="teacherId" placeholder="Teacher Id" />
+        <input id="theoryPractical" placeholder="Theory/Practical" />
+        <input id="academicYear" placeholder="Academic Year" />
+        <div class="actions">
+          <button id="saveBtn">Save</button>
+          <button id="cancelBtn" style="background:#64748b;">Cancel</button>
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>College</th>
+            <th>Program Id</th>
+            <th>Semester</th>
+            <th>UPC Code</th>
+            <th>Teacher Id</th>
+            <th>Theory/Practical</th>
+            <th>Academic Year</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+
+    <script>
+      const teachingTable = 'College_Course_Teaching_Details';
+
+      const rowsBody = document.getElementById('rows');
+      const formCard = document.getElementById('formCard');
+      const message = document.getElementById('message');
+      const collegeSelect = document.getElementById('collegeSelect');
+      const userLabel = document.getElementById('userLabel');
+
+      const currentUser = sessionStorage.getItem('ticEmail');
+      const collegeName = sessionStorage.getItem('collegeName') || '';
+      const academicYear = sessionStorage.getItem('academicYear') || '';
+      const teacherName = sessionStorage.getItem('userName') || currentUser || '';
+
+      if (!currentUser) {
+        window.location.href = 'auth_demo.html';
+      } else {
+        userLabel.textContent = `${teacherName} • ${collegeName}${academicYear ? ' • ' + academicYear : ''}`;
+      }
+
+      let collegeMap = new Map();
+
+      async function loadColleges() {
+        try {
+          const response = await fetch('/api/colleges');
+          const result = await response.json();
+          const data = result.data || [];
+
+          collegeMap = new Map();
+          collegeSelect.innerHTML = '<option value="">Select College</option>';
+
+          (data || []).forEach((college) => {
+            collegeMap.set(college.Cid, college.College_Name || 'Unknown College');
+            const option = document.createElement('option');
+            option.value = college.Cid;
+            option.textContent = college.College_Name || `College ${college.Cid}`;
+            collegeSelect.appendChild(option);
+          });
+        } catch (error) {
+          console.warn('Could not load colleges:', error);
+        }
+      }
+
+      async function loadData() {
+        await loadColleges();
+
+        try {
+          const response = await fetch('/api/records');
+          const result = await response.json();
+          const data = result.data || [];
+
+          rowsBody.innerHTML = '';
+          if (!data || data.length === 0) {
+            rowsBody.innerHTML = '<tr><td colspan="8">No records found.</td></tr>';
+            return;
+          }
+
+          data.forEach((row) => {
+            const collegeName = row.Cid != null && collegeMap.has(row.Cid)
+              ? collegeMap.get(row.Cid)
+              : row.Cid ?? '';
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td>${row.Id ?? ''}</td>
+              <td>${collegeName}</td>
+              <td>${row.Program_Id ?? ''}</td>
+              <td>${row.Semester ?? ''}</td>
+              <td>${row.UPC_Code ?? ''}</td>
+              <td>${row.Teacher_id ?? ''}</td>
+              <td>${row.Theory_Practical ?? ''}</td>
+              <td>${row.Academic_Year ?? ''}</td>
+            `;
+            rowsBody.appendChild(tr);
+          });
+        } catch (error) {
+          message.textContent = `Error loading data from ${teachingTable}: ${error.message}`;
+        }
+      }
+
+      document.getElementById('addBtn').addEventListener('click', () => {
+        formCard.style.display = 'block';
+      });
+
+      document.getElementById('cancelBtn').addEventListener('click', () => {
+        formCard.style.display = 'none';
+      });
+
+      document.getElementById('saveBtn').addEventListener('click', async () => {
+        const payload = {
+          Cid: Number(collegeSelect.value) || null,
+          Program_Id: Number(document.getElementById('programId').value) || null,
+          Semester: Number(document.getElementById('semester').value) || null,
+          UPC_Code: Number(document.getElementById('upcCode').value) || null,
+          Teacher_id: Number(document.getElementById('teacherId').value) || null,
+          Theory_Practical: document.getElementById('theoryPractical').value || null,
+          Academic_Year: Number(document.getElementById('academicYear').value) || null,
+        };
+
+        try {
+          const response = await fetch('/api/records', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          const result = await response.json();
+
+          if (!response.ok) {
+            throw new Error(result.message || 'Insert failed');
+          }
+
+          message.textContent = 'Record added successfully.';
+          formCard.style.display = 'none';
+          formCard.querySelectorAll('input, select').forEach((field) => {
+            field.value = '';
+          });
+          await loadData();
+        } catch (error) {
+          message.textContent = `Error inserting record into ${teachingTable}: ${error.message}`;
+        }
+      });
+
+      loadData();
+    </script>
+  </body>
+</html>

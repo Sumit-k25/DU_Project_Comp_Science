@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TIC Login</title>
+    <style>
+      body { font-family: Arial, sans-serif; background: #f4f7fb; margin: 0; }
+      .box { max-width: 420px; margin: 80px auto; padding: 24px; background: white; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.08); }
+      input { width: 100%; padding: 10px; margin-bottom: 12px; border: 1px solid #cbd5e1; border-radius: 8px; }
+      button { width: 100%; padding: 10px; background: #2563eb; color: white; border: none; border-radius: 8px; cursor: pointer; }
+      .msg { margin-top: 12px; font-weight: bold; }
+    </style>
+  </head>
+  <body>
+    <div class="box">
+      <h2>TIC Login</h2>
+      <input id="email" placeholder="TIC Email" />
+      <input id="password" type="password" placeholder="Password" />
+      <button onclick="login()">Login</button>
+      <div id="msg" class="msg"></div>
+    </div>
+
+    <script>
+      window.login = async function () {
+        const email = document.getElementById('email').value.trim();
+        const password = document.getElementById('password').value;
+        const msg = document.getElementById('msg');
+
+        if (!email || !password) {
+          msg.textContent = 'Please enter email and password.';
+          return;
+        }
+
+        try {
+          const response = await fetch('/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+          });
+
+          const result = await response.json();
+
+          if (!response.ok || !result.success) {
+            msg.textContent = result.message || 'Login failed.';
+            return;
+          }
+
+          const user = result.user || {};
+          sessionStorage.setItem('ticEmail', user.email || email);
+          sessionStorage.setItem('userName', user.teacherName || email);
+          sessionStorage.setItem('collegeId', String(user.collegeId || ''));
+          sessionStorage.setItem('collegeName', user.collegeName || '');
+          sessionStorage.setItem('academicYear', String(user.academicYear ?? ''));
+
+          window.location.href = 'index.html';
+        } catch (error) {
+          msg.textContent = 'Login request failed.';
+        }
+      };
+    </script>
+  </body>
+</html>
