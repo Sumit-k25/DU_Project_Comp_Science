@@ -41,7 +41,15 @@ def login():
     if not isinstance(college, dict) or not college:
         return jsonify({"success": False, "message": "This TIC email is not registered in the College table"}), 401
 
-    user_resp = supabase.table('users').select('*').eq('tic_email', email).eq('password', password).maybe_single().execute()
+    user_resp = (
+    supabase.table('Users')
+    .select('*')
+    .eq('tic_mail', email)
+    .eq('password', password)
+    .maybe_single()
+    .execute()
+                )
+    
     user = _extract_single_data(user_resp)
     if not isinstance(user, dict) or not user:
         return jsonify({"success": False, "message": "Invalid password for this TIC email"}), 401
@@ -65,9 +73,62 @@ def colleges():
     resp = supabase.table('College').select('Cid, College_Name').order('College_Name', desc=False).execute()
     return jsonify({"data": resp.data or []})
 
+@app.route('/api/programs', methods=['GET'])
+def programs():
+    college_id = request.args.get('collegeId') or request.args.get('Cid')
+    if not college_id:
+        return jsonify({"data": []})
+    try:
+        college_id = int(college_id)
+    except ValueError:
+        return jsonify({"data": []})
+
+    resp = (
+        supabase.table('College_Program')
+        .select('Program_id, Program_Name')
+        .eq('Cid', college_id)
+        .order('Program_Name', desc=False)
+        .execute()
+    )
+    return jsonify({"data": resp.data or []})
+
 @app.route('/api/records', methods=['GET'])
 def records():
     resp = supabase.table('College_Course_Teaching_Details').select('*').order('Id', desc=False).execute()
+    return jsonify({"data": resp.data or []})
+
+@app.route('/api/teachers', methods=['GET'])
+def teachers():
+    college_id = request.args.get('collegeId') or request.args.get('Cid')
+    if not college_id:
+        return jsonify({"data": []})
+    try:
+        college_id = int(college_id)
+    except ValueError:
+        return jsonify({"data": []})
+
+    resp = (
+        supabase.table('Teachers_Data')
+        .select('Teacher_Id, Teacher_Name')
+        .eq('Cid', college_id)
+        .eq('Status', 'Active')
+        .order('Teacher_Name', desc=False)
+        .execute()
+    )
+    return jsonify({"data": resp.data or []})
+
+@app.route('/api/papers', methods=['GET'])
+def papers():
+    semester = request.args.get('semester')
+
+    builder = supabase.table('Papers').select('UPC_Code, Paper_Name, Semester, Paper_Type')
+    if semester:
+        try:
+            builder = builder.eq('Semester', int(semester))
+        except ValueError:
+            pass
+
+    resp = builder.order('Paper_Name', desc=False).execute()
     return jsonify({"data": resp.data or []})
 
 @app.route('/api/records', methods=['POST'])

@@ -80,10 +80,17 @@
         <select id="collegeSelect">
           <option value="">Select College</option>
         </select>
-        <input id="programId" placeholder="Program Id" />
-        <input id="semester" placeholder="Semester" />
-        <input id="upcCode" placeholder="UPC Code" />
-        <input id="teacherId" placeholder="Teacher Id" />
+        <select id="programSelect">
+          <option value="">Select Program</option>
+        </select>
+        <select id="paperSelect">
+          <option value="">Select Paper</option>
+        </select>
+        <input id="semester" placeholder="Semester" readonly />
+        <select id="teacherSelect">
+          <option value="">Select Teacher</option>
+        </select>
+        <input id="upcCode" placeholder="UPC Code" readonly />
         <input id="theoryPractical" placeholder="Theory/Practical" />
         <input id="academicYear" placeholder="Academic Year" />
         <div class="actions">
@@ -116,7 +123,12 @@
       const formCard = document.getElementById('formCard');
       const message = document.getElementById('message');
       const collegeSelect = document.getElementById('collegeSelect');
+      const programSelect = document.getElementById('programSelect');
+      const paperSelect = document.getElementById('paperSelect');
+      const teacherSelect = document.getElementById('teacherSelect');
       const userLabel = document.getElementById('userLabel');
+      const semesterInput = document.getElementById('semester');
+      const upcCodeInput = document.getElementById('upcCode');
 
       const currentUser = sessionStorage.getItem('ticEmail');
       const collegeName = sessionStorage.getItem('collegeName') || '';
@@ -147,10 +159,104 @@
             option.textContent = college.College_Name || `College ${college.Cid}`;
             collegeSelect.appendChild(option);
           });
+
+          const storedCollegeId = sessionStorage.getItem('collegeId');
+          if (storedCollegeId) {
+            collegeSelect.value = storedCollegeId;
+            collegeSelect.disabled = true;
+            await populateProgramSelect(storedCollegeId);
+          }
         } catch (error) {
           console.warn('Could not load colleges:', error);
         }
       }
+
+      async function loadPrograms(collegeId) {
+        if (!collegeId) {
+          return [];
+        }
+
+        try {
+          const response = await fetch(`/api/programs?collegeId=${encodeURIComponent(collegeId)}`);
+          const result = await response.json();
+          return result.data || [];
+        } catch (error) {
+          console.warn('Could not load programs:', error);
+          return [];
+        }
+      }
+
+      async function loadTeachers(collegeId) {
+        if (!collegeId) {
+          return [];
+        }
+
+        try {
+          const response = await fetch(`/api/teachers?collegeId=${encodeURIComponent(collegeId)}`);
+          const result = await response.json();
+          return result.data || [];
+        } catch (error) {
+          console.warn('Could not load teachers:', error);
+          return [];
+        }
+      }
+
+      async function loadPapers(programId, semester) {
+        const query = new URLSearchParams();
+        if (programId) query.set('programId', programId);
+        if (semester) query.set('semester', semester);
+
+        try {
+          const response = await fetch(`/api/papers?${query.toString()}`);
+          const result = await response.json();
+          return result.data || [];
+        } catch (error) {
+          console.warn('Could not load papers:', error);
+          return [];
+        }
+      }
+
+      async function populateProgramSelect(collegeId) {
+        const programs = await loadPrograms(collegeId);
+        programSelect.innerHTML = '<option value="">Select Program</option>';
+        programs.forEach((program) => {
+          const option = document.createElement('option');
+          option.value = program.Program_id;
+          option.textContent = program.Program_Name || `Program ${program.Program_id}`;
+          programSelect.appendChild(option);
+        });
+      }
+
+      async function populateTeacherSelect(collegeId) {
+        const teachers = await loadTeachers(collegeId);
+        teacherSelect.innerHTML = '<option value="">Select Teacher</option>';
+        teachers.forEach((teacher) => {
+          const option = document.createElement('option');
+          option.value = teacher.Teacher_Id;
+          option.textContent = teacher.Teacher_Name || `Teacher ${teacher.Teacher_Id}`;
+          teacherSelect.appendChild(option);
+        });
+      }
+
+      async function populatePaperSelect(programId, semester) {
+        const papers = await loadPapers(programId, semester);
+        paperSelect.innerHTML = '<option value="">Select Paper</option>';
+        papers.forEach((paper) => {
+          const option = document.createElement('option');
+          option.value = paper.UPC_Code;
+          option.textContent = paper.Paper_Name || `Paper ${paper.UPC_Code}`;
+          paperSelect.appendChild(option);
+        });
+      }
+
+      collegeSelect.addEventListener('change', async () => {
+        const selectedCollegeId = collegeSelect.value || sessionStorage.getItem('collegeId');
+        await populateProgramSelect(selectedCollegeId);
+        await populateTeacherSelect(selectedCollegeId);
+        paperSelect.innerHTML = '<option value="">Select Paper</option>';
+        semesterInput.value = '';
+        upcCodeInput.value = '';
+      });
 
       async function loadData() {
         await loadColleges();
@@ -196,13 +302,32 @@
         formCard.style.display = 'none';
       });
 
+      programSelect.addEventListener('change', async () => {
+        await populatePaperSelect(null);
+        semesterInput.value = '';
+        upcCodeInput.value = '';
+      });
+
+      paperSelect.addEventListener('change', async () => {
+        const selectedUPC = paperSelect.value;
+        const papers = await loadPapers(null);
+        const selectedPaper = papers.find((paper) => String(paper.UPC_Code) === String(selectedUPC));
+        if (selectedPaper) {
+          semesterInput.value = selectedPaper.Semester || '';
+          upcCodeInput.value = selectedPaper.UPC_Code || '';
+        } else {
+          semesterInput.value = '';
+          upcCodeInput.value = '';
+        }
+      });
+
       document.getElementById('saveBtn').addEventListener('click', async () => {
         const payload = {
-          Cid: Number(collegeSelect.value) || null,
-          Program_Id: Number(document.getElementById('programId').value) || null,
-          Semester: Number(document.getElementById('semester').value) || null,
-          UPC_Code: Number(document.getElementById('upcCode').value) || null,
-          Teacher_id: Number(document.getElementById('teacherId').value) || null,
+          Cid: Number(sessionStorage.getItem('collegeId')) || Number(collegeSelect.value) || null,
+          Program_Id: Number(programSelect.value) || null,
+          Semester: Number(semesterInput.value) || null,
+          UPC_Code: Number(upcCodeInput.value) || null,
+          Teacher_id: Number(teacherSelect.value) || null,
           Theory_Practical: document.getElementById('theoryPractical').value || null,
           Academic_Year: Number(document.getElementById('academicYear').value) || null,
         };
@@ -221,9 +346,11 @@
 
           message.textContent = 'Record added successfully.';
           formCard.style.display = 'none';
-          formCard.querySelectorAll('input, select').forEach((field) => {
-            field.value = '';
+          formCard.querySelectorAll('input').forEach((f) => f.value = '');
+          formCard.querySelectorAll('select').forEach((f) => {
+            if (f !== collegeSelect) f.value = '';
           });
+          if (!collegeSelect.disabled) collegeSelect.value = '';
           await loadData();
         } catch (error) {
           message.textContent = `Error inserting record into ${teachingTable}: ${error.message}`;
