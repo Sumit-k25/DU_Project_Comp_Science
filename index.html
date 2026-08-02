@@ -61,9 +61,23 @@
       }
       .actions { display: flex; gap: 10px; }
       .message { margin-top: 12px; font-weight: bold; }
+      .teacher-link { color: #2563eb; cursor: pointer; text-decoration: underline; }
+      .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); justify-content: center; align-items: center; z-index: 1000; }
+      .modal-content { background: white; width: min(700px, 90vw); max-height: 80vh; overflow: auto; padding: 20px; border-radius: 12px; }
+      .modal-close { float: right; cursor: pointer; font-size: 18px; }
+      .detail-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+      .detail-table th, .detail-table td { border: 1px solid #e5e7eb; padding: 8px; text-align: left; }
     </style>
   </head>
   <body>
+    <div class="modal" id="teacherModal">
+      <div class="modal-content">
+        <span class="modal-close" id="modalClose">×</span>
+        <h3 id="modalTitle">Teacher Details</h3>
+        <div id="modalBody"></div>
+      </div>
+    </div>
+
     <div class="container">
       <div class="header">
         <h2>College Course Teaching Details</h2>
@@ -91,8 +105,13 @@
           <option value="">Select Teacher</option>
         </select>
         <input id="upcCode" placeholder="UPC Code" readonly />
-        <input id="theoryPractical" placeholder="Theory/Practical" />
-        <input id="academicYear" placeholder="Academic Year" />
+        <select id="theoryPractical">
+          <option value="">Select Type</option>
+          <option value="Theory">Theory</option>
+          <option value="Practical">Practical</option>
+          <option value="Theory and Practical">Theory and Practical</option>
+        </select>
+        <input id="academicYear" placeholder="Academic Year" readonly />
         <div class="actions">
           <button id="saveBtn">Save</button>
           <button id="cancelBtn" style="background:#64748b;">Cancel</button>
@@ -102,12 +121,11 @@
       <table>
         <thead>
           <tr>
-            <th>ID</th>
-            <th>College</th>
-            <th>Program Id</th>
+            <th>S.No.</th>
+            <th>Program Name</th>
             <th>Semester</th>
-            <th>UPC Code</th>
-            <th>Teacher Id</th>
+            <th>UPC Code - Paper Name</th>
+            <th>Teacher Name</th>
             <th>Theory/Practical</th>
             <th>Academic Year</th>
           </tr>
@@ -122,6 +140,10 @@
       const rowsBody = document.getElementById('rows');
       const formCard = document.getElementById('formCard');
       const message = document.getElementById('message');
+      const teacherModal = document.getElementById('teacherModal');
+      const modalBody = document.getElementById('modalBody');
+      const modalTitle = document.getElementById('modalTitle');
+      const modalClose = document.getElementById('modalClose');
       const collegeSelect = document.getElementById('collegeSelect');
       const programSelect = document.getElementById('programSelect');
       const paperSelect = document.getElementById('paperSelect');
@@ -129,6 +151,8 @@
       const userLabel = document.getElementById('userLabel');
       const semesterInput = document.getElementById('semester');
       const upcCodeInput = document.getElementById('upcCode');
+      const theoryPracticalSelect = document.getElementById('theoryPractical');
+      const academicYearInput = document.getElementById('academicYear');
 
       const currentUser = sessionStorage.getItem('ticEmail');
       const collegeName = sessionStorage.getItem('collegeName') || '';
@@ -142,6 +166,71 @@
       }
 
       let collegeMap = new Map();
+
+      function openTeacherModal(teacherId, teacherName, academicYearValue) {
+        modalTitle.textContent = teacherName || 'Teacher Details';
+        modalBody.innerHTML = '<p>Loading...</p>';
+        teacherModal.style.display = 'flex';
+
+        const query = new URLSearchParams();
+        if (teacherId) query.set('teacherId', teacherId);
+        if (academicYearValue) query.set('academicYear', academicYearValue);
+
+        fetch(`/api/teacher-details?${query.toString()}`)
+          .then((response) => response.json())
+          .then((result) => {
+            if (!result.success) {
+              modalBody.innerHTML = `<p>${result.message || 'Unable to load details.'}</p>`;
+              return;
+            }
+
+            const teacher = result.teacher || {};
+            const courses = result.courses || [];
+            modalBody.innerHTML = `
+              <p><strong>Name:</strong> ${teacher.Teacher_Name || ''}</p>
+              <p><strong>Email:</strong> ${teacher.Mail || ''}</p>
+              <p><strong>Status:</strong> ${teacher.Status || ''}</p>
+              <p><strong>Academic Year:</strong> ${academicYearValue || ''}</p>
+              <table class="detail-table">
+                <thead>
+                  <tr>
+                    <th>S.No.</th>
+                    <th>Program</th>
+                    <th>UPC Code</th>
+                    <th>Paper Name</th>
+                    <th>Type</th>
+                    <th>Semester</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${courses.length ? courses.map((course, index) => `
+                    <tr>
+                      <td>${index + 1}</td>
+                      <td>${course.Program_Name || ''}</td>
+                      <td>${course.UPC_Code || ''}</td>
+                      <td>${course.Paper_Name || ''}</td>
+                      <td>${course.Theory_Practical || ''}</td>
+                      <td>${course.Semester || ''}</td>
+                    </tr>
+                  `).join('') : '<tr><td colspan="6">No courses found.</td></tr>'}
+                </tbody>
+              </table>
+            `;
+          })
+          .catch(() => {
+            modalBody.innerHTML = '<p>Unable to load teacher details.</p>';
+          });
+      }
+
+      modalClose.addEventListener('click', () => {
+        teacherModal.style.display = 'none';
+      });
+
+      teacherModal.addEventListener('click', (event) => {
+        if (event.target === teacherModal) {
+          teacherModal.style.display = 'none';
+        }
+      });
 
       async function loadColleges() {
         try {
@@ -165,6 +254,7 @@
             collegeSelect.value = storedCollegeId;
             collegeSelect.disabled = true;
             await populateProgramSelect(storedCollegeId);
+            await populateTeacherSelect(storedCollegeId);
           }
         } catch (error) {
           console.warn('Could not load colleges:', error);
@@ -233,7 +323,8 @@
         teachers.forEach((teacher) => {
           const option = document.createElement('option');
           option.value = teacher.Teacher_Id;
-          option.textContent = teacher.Teacher_Name || `Teacher ${teacher.Teacher_Id}`;
+          const teacherName = teacher.Teacher_Name || `Teacher ${teacher.Teacher_Id}`;
+          option.textContent = `${teacher.Teacher_Id} - ${teacherName}`;
           teacherSelect.appendChild(option);
         });
       }
@@ -262,7 +353,7 @@
         await loadColleges();
 
         try {
-          const response = await fetch('/api/records');
+          const response = await fetch(`/api/records?ticEmail=${encodeURIComponent(currentUser || '')}&collegeId=${encodeURIComponent(sessionStorage.getItem('collegeId') || '')}`);
           const result = await response.json();
           const data = result.data || [];
 
@@ -272,22 +363,29 @@
             return;
           }
 
-          data.forEach((row) => {
-            const collegeName = row.Cid != null && collegeMap.has(row.Cid)
-              ? collegeMap.get(row.Cid)
-              : row.Cid ?? '';
+          data.forEach((row, index) => {
             const tr = document.createElement('tr');
+            const teacherName = row.Teacher_Name || row.Teacher_id || '';
+            const teacherId = row.Teacher_id;
+            const academicYearValue = row.Academic_Year;
             tr.innerHTML = `
-              <td>${row.Id ?? ''}</td>
-              <td>${collegeName}</td>
-              <td>${row.Program_Id ?? ''}</td>
+              <td>${index + 1}</td>
+              <td>${row.Program_Name || row.Program_Id || ''}</td>
               <td>${row.Semester ?? ''}</td>
-              <td>${row.UPC_Code ?? ''}</td>
-              <td>${row.Teacher_id ?? ''}</td>
+              <td>${row.UPC_Code != null ? `${row.UPC_Code}${row.Paper_Name ? ' - ' + row.Paper_Name : ''}` : ''}</td>
+              <td>
+                ${teacherId != null ? `<span class="teacher-link" data-teacher-id="${teacherId}" data-teacher-name="${teacherName}" data-academic-year="${academicYearValue ?? ''}">${teacherName}</span>` : ''}
+              </td>
               <td>${row.Theory_Practical ?? ''}</td>
-              <td>${row.Academic_Year ?? ''}</td>
+              <td>${academicYearValue ?? ''}</td>
             `;
             rowsBody.appendChild(tr);
+          });
+
+          rowsBody.querySelectorAll('.teacher-link').forEach((link) => {
+            link.addEventListener('click', () => {
+              openTeacherModal(link.dataset.teacherId, link.dataset.teacherName, link.dataset.academicYear);
+            });
           });
         } catch (error) {
           message.textContent = `Error loading data from ${teachingTable}: ${error.message}`;
@@ -295,6 +393,7 @@
       }
 
       document.getElementById('addBtn').addEventListener('click', () => {
+        academicYearInput.value = academicYear || '';
         formCard.style.display = 'block';
       });
 
@@ -346,10 +445,13 @@
 
           message.textContent = 'Record added successfully.';
           formCard.style.display = 'none';
-          formCard.querySelectorAll('input').forEach((f) => f.value = '');
+          formCard.querySelectorAll('input').forEach((f) => {
+            if (f.id !== 'academicYear') f.value = '';
+          });
           formCard.querySelectorAll('select').forEach((f) => {
             if (f !== collegeSelect) f.value = '';
           });
+          academicYearInput.value = academicYear || '';
           if (!collegeSelect.disabled) collegeSelect.value = '';
           await loadData();
         } catch (error) {
